@@ -12,30 +12,33 @@ else
 	GRIND_DATA="$GRIND_DATA_DIR/grind.data"
 fi
 
+# Colors for highlighting
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+CLEAR='\033[0m'
+
 # Usage string to be printed whenever user enters an unrecognized option or
 # enters the 'help' option.
 USAGE=$(cat <<-END
-	Usage: $(basename $0) [options]
+	Usage: $(basename $0) [${BLUE}options${CLEAR}]
 	Run \`$(basename $0)\` without any arguments to start your review session.
 	Options:
-	    status - Print data on total number of problems in system,\
- and number of problems due for review.
-	    help - Prints this help message.
+	    ${BLUE}status${CLEAR}  Print total number of problems and number of due problems.
+	    ${BLUE}help${CLEAR}    Prints this help message.
 END
 )
 
 # String to show to the user to remind them what the different grades mean.
 GRADES_INFO=$(cat <<-END
 	Once you have attempted it, grade it on the following scale:
-	    0: Zero clue how to do it
-	    1: Couldn't solve it, but you had some guesses or the solution looked familiar
-	    2: Couldn't solve it, but had the right idea / implemented part of the solution correctly
-	    3: Solved, but took significant effort and multiple submissions
-	    4: Solved, but felt tricky or took some time to recall
-	    5: Solved smoothly and easily
+	    ${RED}0${CLEAR}: Zero clue how to do it
+	    ${RED}1${CLEAR}: Didn't solve, but had guesses / vaguely recalled solution
+	    ${RED}2${CLEAR}: Didn't solve, but had mostly the right idea
+	    ${RED}3${CLEAR}: Solved, but took significant effort / many attempts
+	    ${RED}4${CLEAR}: Solved, but felt tricky or was not the best solution
+	    ${RED}5${CLEAR}: Solved smoothly and easily.
 END
 )
-
 
 ###############
 # Basic setup #
@@ -56,21 +59,21 @@ if [ "$1" == "status" ]; then # The user ran `grind status`
 
 	# Compute total number of problems, number of due problems
 	TOTAL=$(awk 'END{print NR}' $GRIND_DATA)
-	TODO=$(awk -v now="$(date +%s)" '$4<now {i++} END{print i}' $GRIND_DATA)
+	TODO=$(awk -v now="$(date +%s)" '$4<now {i++} END{print i+0}' $GRIND_DATA)
 
 	# Print stats and exit
-	echo "There are $TOTAL problems in the system, of which $TODO are due."
+	echo -e "There are ${BLUE}$TOTAL${CLEAR} problems in the system, of which ${RED}$TODO${CLEAR} are due."
 	exit 0
 
 elif [ "$1" == "help" ]; then # The user ran `grind help`
 
-	echo "$USAGE"
+	echo -e "$USAGE"
 	exit 0
 
 elif [ -n "$1" ]; then # The user ran something invalid, like `grind asdf`
 
 	# Print the unrecognized option and then also the help
-	echo -e "Unrecognized option: $1\n$USAGE"
+	echo -e "Unrecognized option: ${RED}$1${CLEAR}\n$USAGE"
 	exit 1
 
 fi
@@ -97,10 +100,13 @@ do
 	EARLIEST_DUE=$(awk 'FNR == 1 {print $4; exit}' $GRIND_DATA)
 	if [ -z "$EARLIEST_DUE" ] || [ "$EARLIEST_DUE" -gt "$NOW" ]; then
 		# Nothing to do
-		echo -ne "There are currently no problems due for a review. Choose a new problem and paste the URL below:\n> "
+		echo -ne "There are currently no problems due for a review.\nChoose a new problem and paste the URL below:\n> ${BLUE}"
 
 		# Read URL in by user input. If empty (e.g. user hit ctrl-D), exit
 		read URL
+		# Reset printing color to clear
+		echo -e "${CLEAR}"
+
 		if [ -z "$URL" ]; then
 			exit 0
 		fi
@@ -120,7 +126,7 @@ do
 		NEWPROBLEM=false
 
 		# Print some stats for the user
-		echo -e "The next problem due for review is $URL\nYou last reviewed it $I days ago, and you have correctly solved it $N times in a row."
+		echo -e "The next problem due for review is\n${BLUE}$URL${CLEAR}\nLast review: $I day(s) ago\nSolve streak: $N consecutive correct solve(s)"
 	fi
 
 	# Print the message that tells user what the different grades mean
@@ -130,8 +136,9 @@ do
 	while :
 	do
 		# Try reading in grade from the user
-		echo -n "Grade: "
+		echo -ne "Grade: ${RED}"
 		read GRADE
+		echo -e "${CLEAR}"
 
 		# If empty (e.g. Ctrl-D hit), exit
 		if [ -z "$GRADE" ]; then
@@ -145,7 +152,7 @@ do
 		fi
 
 		# Grade was ill formatted, print error and loop
-		echo "Invalid grade, please enter a single digit 0-5."
+		echo -e "Invalid grade, please enter a single digit ${RED}0${CLEAR}-${RED}5${CLEAR}."
 	done
 
 	# Supermemo implementation. Based on pseudocode given in
@@ -170,7 +177,7 @@ do
 
 	# If old problem, remove first line from file (we will be replacing it with
 	# a new line containing the new N, EF, and times)
-	if [ -n NEWPROBLEM ]; then
+	if [ "$NEWPROBLEM" = false ]; then
 		tail -n +2 "$GRIND_DATA" > "$GRIND_DATA.tmp" && mv "$GRIND_DATA.tmp" "$GRIND_DATA"
 	fi
 
