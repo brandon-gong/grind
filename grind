@@ -27,11 +27,11 @@ END
 # String to show to the user to remind them what the different grades mean.
 GRADES_INFO=$(cat <<-END
 	Once you have attempted it, grade it on the following scale:
-	    0: Complete failure to recall anything
-	    1: Couldn't solve it, but the solution looked familiar
-	    2: Couldn't solve it, but remembered and implemented part of the solution correctly
+	    0: Zero clue how to do it
+	    1: Couldn't solve it, but you had some guesses or the solution looked familiar
+	    2: Couldn't solve it, but had the right idea / implemented part of the solution correctly
 	    3: Solved, but took significant effort and multiple submissions
-	    4: Solved, but took some time recall
+	    4: Solved, but felt tricky or took some time to recall
 	    5: Solved smoothly and easily
 END
 )
