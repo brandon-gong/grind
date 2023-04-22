@@ -1,0 +1,178 @@
+#!/bin/bash
+
+#################################
+# Initializing global variables #
+#################################
+
+# Allow the user to specify path to the data directory if they want to put it
+# somewhere else. $GRIND_DATA is then the path to the grind.data file
+if [ -z "$GRIND_DATA_DIR" ]; then
+	GRIND_DATA=grind.data
+else
+	GRIND_DATA="$GRIND_DATA_DIR/grind.data"
+fi
+
+# Usage string to be printed whenever user enters an unrecognized option or
+# enters the 'help' option.
+USAGE=$(cat <<-END
+	Usage: $(basename $0) [options]
+	Run \`$(basename $0)\` without any arguments to start your review session.
+	Options:
+	    status - Print data on total number of problems in system,\
+ and number of problems due for review.
+	    help - Prints this help message.
+END
+)
+
+# String to show to the user to remind them what the different grades mean.
+GRADES_INFO=$(cat <<-END
+	Once you have attempted it, grade it on the following scale:
+	    0: Complete failure to recall anything
+	    1: Couldn't solve it, but the solution looked familiar
+	    2: Couldn't solve it, but remembered and implemented part of the solution correctly
+	    3: Solved, but took significant effort and multiple submissions
+	    4: Solved, but took some time recall
+	    5: Solved smoothly and easily
+END
+)
+
+
+###############
+# Basic setup #
+###############
+
+# Change directories to the same directory as the script, because normally
+# grind.data is located in the same dir relative to the script
+cd $(dirname "$BASH_SOURCE")
+
+# Create the grind.data file at the desired location if it does not exist.
+if ! [ -f "$GRIND_DATA" ]; then
+	touch $GRIND_DATA
+fi
+
+# Checking for options which may cause program to run differently: status,
+# help, and unrecognized options.
+if [ "$1" == "status" ]; then # The user ran `grind status`
+
+	# Compute total number of problems, number of due problems
+	TOTAL=$(awk 'END{print NR}' $GRIND_DATA)
+	TODO=$(awk -v now="$(date +%s)" '$4<now {i++} END{print i}' $GRIND_DATA)
+
+	# Print stats and exit
+	echo "There are $TOTAL problems in the system, of which $TODO are due."
+	exit 0
+
+elif [ "$1" == "help" ]; then # The user ran `grind help`
+
+	echo "$USAGE"
+	exit 0
+
+elif [ -n "$1" ]; then # The user ran something invalid, like `grind asdf`
+
+	# Print the unrecognized option and then also the help
+	echo -e "Unrecognized option: $1\n$USAGE"
+	exit 1
+
+fi
+
+
+########################
+# Read-Eval-Print-Loop #
+########################
+
+while :
+do
+	# Clear the terminal, just for aesthetic purposes
+	clear
+
+	# Get the current system time (in seconds). Used to figure out the interval
+	# since the last review, and also saved once the review occurs.
+	NOW=$(date +%s)
+
+	# Sort the problems by due date
+	sort -nk4 $GRIND_DATA -o $GRIND_DATA
+
+	# If the earliest due problem is not due yet, then nothing's due;
+	# start asking the user for more problems
+	if [ $(awk 'FNR == 1 {print $4; exit}' $GRIND_DATA) -gt "$NOW" ]; then
+		# Nothing to do
+		echo -ne "There are currently no problems due for a review. Choose a new problem and paste the URL below:\n> "
+
+		# Read URL in by user input. If empty (e.g. user hit ctrl-D), exit
+		read URL
+		if [ -z "$URL" ]; then
+			exit 0
+		fi
+
+		# Initialize N, EF, and I as specified by the SM2 algorithm.
+		N=0
+		EF=2.5
+		I=0
+		NEWPROBLEM=true
+	else
+		# Use awk to load in N and EF from saved data. Compute I as current time,
+		# minus last reviewed time, divided by 86400 (converting secs to days)
+		URL=$(awk 'FNR == 1 {print $5; exit}' $GRIND_DATA)
+		N=$(awk 'FNR == 1 {print $1; exit}' $GRIND_DATA)
+		EF=$(awk 'FNR == 1 {print $2; exit}' $GRIND_DATA)
+		I=$(awk -v now="$(date +%s)" 'function ceil(x){return int(x)+(x>int(x))} FNR == 1 {print ceil((now - $3)/86400)}' $GRIND_DATA)
+		NEWPROBLEM=false
+
+		# Print some stats for the user
+		echo -e "The next problem due for review is $URL\nYou last reviewed it $I days ago, and you have correctly solved it $N times in a row."
+	fi
+
+	# Print the message that tells user what the different grades mean
+	echo -e "\n$GRADES_INFO"
+	
+	# This loop collects user input for the grade until its a valid number
+	while :
+	do
+		# Try reading in grade from the user
+		echo -n "Grade: "
+		read GRADE
+
+		# If empty (e.g. Ctrl-D hit), exit
+		if [ -z "$GRADE" ]; then
+			exit 0
+		fi
+
+		# Checking if GRADE is in a valid format: it consists of exactly one digit,
+		# and that one digit appears in the string "012345".
+		if [ ${#GRADE} == 1 ] && [ "$(echo 012345 | grep $GRADE)" ]; then
+			break
+		fi
+
+		# Grade was ill formatted, print error and loop
+		echo "Invalid grade, please enter a single digit 0-5."
+	done
+
+	# Supermemo implementation. Based on pseudocode given in
+	# https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm
+	if [ $GRADE -gt 2 ]; then
+		if [ $N == 0 ]; then
+			I=1
+		elif [ $N == 1 ]; then
+			I=6
+		else
+			I=$(awk -v "I=$I" -v "EF=$EF" 'BEGIN { printf("%.0f\n", I*EF); }')
+		fi
+		N=$((N+1))
+	else
+		N=0
+		I=1
+	fi
+	EF=$(echo "$EF + (0.1 - (5 - $GRADE) * (0.08 + (5 - $GRADE) * 0.02))" | bc)
+
+	# Compute the next due system time in seconds
+	NEXTDUE=$(echo "$NOW + $I*86400" | bc)
+
+	# If old problem, remove first line from file (we will be replacing it with
+	# a new line containing the new N, EF, and times)
+	if [ -n NEWPROBLEM ]; then
+		tail -n +2 "$GRIND_DATA" > "$GRIND_DATA.tmp" && mv "$GRIND_DATA.tmp" "$GRIND_DATA"
+	fi
+
+	# Append new data into file and loop
+	echo "$N $EF $NOW $NEXTDUE $URL" >> $GRIND_DATA
+done
