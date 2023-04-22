@@ -94,7 +94,8 @@ do
 
 	# If the earliest due problem is not due yet, then nothing's due;
 	# start asking the user for more problems
-	if [ $(awk 'FNR == 1 {print $4; exit}' $GRIND_DATA) -gt "$NOW" ]; then
+	EARLIEST_DUE=$(awk 'FNR == 1 {print $4; exit}' $GRIND_DATA)
+	if [ -z "$EARLIEST_DUE" ] || [ "$EARLIEST_DUE" -gt "$NOW" ]; then
 		# Nothing to do
 		echo -ne "There are currently no problems due for a review. Choose a new problem and paste the URL below:\n> "
 
