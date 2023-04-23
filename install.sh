@@ -23,4 +23,4 @@ else
 	echo "WARNING: Did not recognize shell $USER_SHELL; you'll need to manually add $HOME/.grind to your PATH to run grind from anywhere."
 fi
 
-echo "Done!"
+echo "Done! You'll need to restart your terminal for changes to take effect."
