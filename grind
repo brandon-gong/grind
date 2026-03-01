@@ -24,6 +24,7 @@ USAGE=$(cat <<-END
 	Run \`$(basename $0)\` without any arguments to start your review session.
 	Options:
 	    ${BLUE}status${CLEAR}  Print total number of problems and number of due problems.
+	    ${BLUE}list${CLEAR}    List all problems in the system with their status.
 	    ${BLUE}help${CLEAR}    Prints this help message.
 END
 )
@@ -54,7 +55,7 @@ if ! [ -f "$GRIND_DATA" ]; then
 fi
 
 # Checking for options which may cause program to run differently: status,
-# help, and unrecognized options.
+# list, help, and unrecognized options.
 if [ "$1" == "status" ]; then # The user ran `grind status`
 
 	# Compute total number of problems, number of due problems
@@ -63,6 +64,48 @@ if [ "$1" == "status" ]; then # The user ran `grind status`
 
 	# Print stats and exit
 	echo -e "There are ${BLUE}$TOTAL${CLEAR} problems in the system, of which ${RED}$TODO${CLEAR} are due."
+	exit 0
+
+elif [ "$1" == "list" ]; then # The user ran `grind list`
+
+	# Check if there are any problems
+	if [ ! -s "$GRIND_DATA" ]; then
+		echo -e "No problems in the system yet."
+		exit 0
+	fi
+
+	# Print header
+	printf "${BLUE}%-12s  %-12s  %s${CLEAR}\n" "Last Solved" "Status" "URL"
+	echo "───────────────────────────────────────────────────────────────────────────────"
+
+	# Print each problem with its status
+	NOW=$(date +%s)
+	while read -r line; do
+		last_solved=$(echo "$line" | awk '{print $3}')
+		due=$(echo "$line" | awk '{print $4}')
+		url=$(echo "$line" | awk '{print $5}')
+
+		# Format last solved date
+		last_fmt=$(date -r "$last_solved" "+%Y-%m-%d" 2>/dev/null || date -d "@$last_solved" "+%Y-%m-%d" 2>/dev/null)
+
+		# Status
+		if [ "$due" -le "$NOW" ]; then
+			status="${RED}DUE${CLEAR}"
+			# Pad to account for color codes not taking visual space
+			printf "%-12s  ${RED}%-12s${CLEAR}  %s\n" "$last_fmt" "DUE" "$url"
+		else
+			days=$(( (due - NOW) / 86400 ))
+			if [ "$days" -eq 0 ]; then
+				status="due today"
+			elif [ "$days" -eq 1 ]; then
+				status="in 1 day"
+			else
+				status="in $days days"
+			fi
+			printf "%-12s  %-12s  %s\n" "$last_fmt" "$status" "$url"
+		fi
+	done < "$GRIND_DATA"
+
 	exit 0
 
 elif [ "$1" == "help" ]; then # The user ran `grind help`
@@ -184,3 +227,4 @@ do
 	# Append new data into file and loop
 	echo "$N $EF $NOW $NEXTDUE $URL" >> $GRIND_DATA
 done
+
